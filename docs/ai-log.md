@@ -61,3 +61,23 @@ assumption, as the spec invites — these bind in Phases 2/3):
 - *Fail-loud on bad metadata:* the loader resolves every `data_type`/`join_type`/`comparator` token
   against its enum at load time and throws with a precise message on an unknown token, instead of
   silently building a partial catalog.
+
+## Phase 2 — Query validator (Part A)
+
+**Contract change escalated to the human (not decided unilaterally)**
+- The Phase 0 `FilterCondition.comparator` was already a `Comparator` enum, which made an *unknown
+  comparator* unrepresentable in the domain — so the required "unknown comparator → structured error"
+  rule and its test could not exist. Flagged this, offered three options, and the human chose the
+  minimal one: change `FilterCondition.comparator` to a raw `String` (wire name) so the validator
+  resolves it via `Comparator.fromWire` and reports unknown/invalid ones as accumulated errors. This
+  also removed an inconsistency (entity/field were already raw strings; comparator was the odd one).
+
+**Corrections / judgement calls**
+- *Avoided a Java 17 preview feature:* used `instanceof` pattern matching to walk the sealed
+  `FilterNode` instead of `switch` pattern matching, which is still preview in Java 17 and would have
+  forced `--enable-preview`. The `switch` expression is used only over the (non-preview) enum
+  cardinality.
+- *Value conversion isolated:* `ValueConverter` is a small standalone unit that throws
+  `ValueConversionException` on any failure, so a malformed value becomes a structured error and never
+  reaches the database. `BigDecimal` is built from the number's string form to avoid binary-float
+  surprises.
