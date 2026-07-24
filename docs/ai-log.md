@@ -99,3 +99,16 @@ assumption, as the spec invites — these bind in Phases 2/3):
 - *Test cruft removed before commit:* an early draft of the resolver test carried an unused
   `emptyMatrix()` helper guarded by `@SuppressWarnings("unused")` just to keep some imports — deleted
   it and the imports, passing the empty comparator matrix inline (the resolver ignores comparators).
+
+**Bug found in human code review, not by the test suite (honest example for the README)**
+- `satisfiable` filtered incoming relations by reachability from the root, but `uniqueRelationTargeting`
+  counted *all* relations pointing at an entity. Both encode the same idea — "is there a unique path
+  to this entity from here?" — and disagreed: `[instrument, party]` passed root selection yet threw
+  "'party' reachable by more than one relation (ambiguous)" during placement, even though from
+  `instrument` only `issuer` reaches `party`. The green suite never caught it because no test exercised
+  a base entity reachable by one path locally but many paths globally. Fix: extracted one
+  reachability-aware `relationsTargeting(entity, reachableSources)` helper used by both call sites, so
+  they cannot diverge again; added tests anchoring the boundary between "unique from here"
+  (`[instrument, party]` → via `issuer`) and "genuinely ambiguous" (`[transaction, party]` → refused
+  at root selection). Lesson: AI-generated code that looks locally correct can hide a cross-method
+  inconsistency two green suites apart — a human reading the two functions side by side caught it.

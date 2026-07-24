@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Unit tests for {@link DefaultJoinResolver}: relation-as-edge behaviour, transitive joins, the same
@@ -142,6 +143,42 @@ class DefaultJoinResolverTest {
                 .containsExactly("instrument", "counterparty");
         assertThat(joinFor(plan, "counterparty").targetAlias()).isEqualTo("p"); // single PARTY join → p
         assertThat(plan.resolvedTables()).containsExactly("TRANSACTION", "INSTRUMENT", "PARTY");
+    }
+
+    @Test
+    void resolvesPartyViaIssuerWhenReachableByOnlyOnePathFromRoot() {
+        // regression: from instrument, party is reachable ONLY via issuer — a unique path.
+        // The lookup must be reachability-aware, or it wrongly reports "ambiguous".
+        JoinPlan plan = resolver.resolve(List.of("instrument", "party"), catalog);
+
+        assertThat(plan.rootEntity()).isEqualTo("instrument");
+        assertThat(plan.joins()).extracting(JoinClause::relationAlias).containsExactly("issuer");
+
+        JoinClause join = joinFor(plan, "issuer");
+        assertThat(join.sourceAlias()).isEqualTo("i");
+        assertThat(join.sourceColumn()).isEqualTo("ISSUER_ID");
+        assertThat(join.targetTable()).isEqualTo("PARTY");
+        assertThat(join.targetAlias()).isEqualTo("p");
+        assertThat(join.targetColumn()).isEqualTo("PARTY_ID");
+        assertThat(plan.aliasByEntity()).containsEntry("party", "p");
+    }
+
+    @Test
+    void refusesGenuinelyAmbiguousPartyReference() {
+        // from transaction, party is reachable via BOTH counterparty and issuer — genuinely ambiguous.
+        assertThatThrownBy(() -> resolver.resolve(List.of("transaction", "party"), catalog))
+                .isInstanceOf(JoinResolutionException.class)
+                .hasMessageContaining("reaches all referenced entities");
+    }
+
+    @Test
+    void resolvesPartyAloneAsRootWithNoJoins() {
+        JoinPlan plan = resolver.resolve(List.of("party"), catalog);
+
+        assertThat(plan.rootEntity()).isEqualTo("party");
+        assertThat(plan.rootAlias()).isEqualTo("p");
+        assertThat(plan.joins()).isEmpty();
+        assertThat(plan.resolvedTables()).containsExactly("PARTY");
     }
 
     @Test

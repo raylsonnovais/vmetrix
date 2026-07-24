@@ -53,6 +53,7 @@ public class DefaultJoinResolver implements JoinResolver {
         private final LinkedHashSet<String> resolvedTables = new LinkedHashSet<>();
         private String root;
         private String rootAlias;
+        private Set<String> reachable; // base entities reachable from the chosen root
 
         private PlanBuilder(MetadataCatalog catalog) {
             this.catalog = catalog;
@@ -60,6 +61,7 @@ public class DefaultJoinResolver implements JoinResolver {
 
         private JoinPlan build(List<String> referencedEntities) {
             root = determineRoot(referencedEntities);
+            reachable = reachableFrom(root);
             EntityMeta rootMeta = baseEntity(root);
             rootAlias = assignAlias(rootMeta.defaultAlias());
             aliasByEntity.put(root, rootAlias);
@@ -120,11 +122,15 @@ public class DefaultJoinResolver implements JoinResolver {
             }
             // A base entity referenced directly (non-root) needs exactly one relation that targets it
             // whose source is reachable — otherwise it is unreachable or ambiguous.
-            Set<String> reached = reachableFrom(root);
-            long viablePaths = catalog.relations().stream()
-                    .filter(r -> r.targetEntity().equals(name) && reached.contains(r.sourceEntity()))
-                    .count();
-            return viablePaths == 1;
+            return relationsTargeting(name, reachableFrom(root)).size() == 1;
+        }
+
+        /** Relations whose target is {@code entity} and whose source is in {@code reachableSources}. */
+        private List<RelationMeta> relationsTargeting(String entity, Set<String> reachableSources) {
+            return catalog.relations().stream()
+                    .filter(relation -> relation.targetEntity().equals(entity)
+                            && reachableSources.contains(relation.sourceEntity()))
+                    .toList();
         }
 
         // --- placement ------------------------------------------------------
@@ -166,16 +172,17 @@ public class DefaultJoinResolver implements JoinResolver {
         // --- helpers --------------------------------------------------------
 
         private RelationMeta uniqueRelationTargeting(String entity) {
-            List<RelationMeta> targeting = catalog.relations().stream()
-                    .filter(r -> r.targetEntity().equals(entity))
-                    .toList();
-            if (targeting.size() != 1) {
-                throw new JoinResolutionException("Cannot reach entity '" + entity + "': "
-                        + (targeting.isEmpty()
-                        ? "no relation targets it"
+            // Reachability-aware, mirroring satisfiable(): only relations whose source is reachable
+            // from the chosen root count, so a path that is unique *from here* is not mistaken for
+            // ambiguous just because the entity has other, unreachable incoming relations.
+            List<RelationMeta> viable = relationsTargeting(entity, reachable);
+            if (viable.size() != 1) {
+                throw new JoinResolutionException("Cannot reach entity '" + entity + "' from root '" + root + "': "
+                        + (viable.isEmpty()
+                        ? "no reachable relation targets it"
                         : "it is reachable by more than one relation (ambiguous)"));
             }
-            return targeting.get(0);
+            return viable.get(0);
         }
 
         private String assignAlias(String base) {
