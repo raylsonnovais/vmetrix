@@ -81,3 +81,21 @@ assumption, as the spec invites — these bind in Phases 2/3):
   `ValueConversionException` on any failure, so a malformed value becomes a structured error and never
   reaches the database. `BigDecimal` is built from the number's string form to avoid binary-float
   surprises.
+
+## Phase 2 — Join resolver (Part B)
+
+**Judgement calls (kept honest)**
+- *Root derived from the graph, not hardcoded names:* instead of coding "transaction, else instrument",
+  the resolver picks the most specific base entity (the one reaching the fewest entities) that still
+  reaches every referenced name. This keeps the rule metadata-driven and gives the right answers for
+  every case — including inferring `transaction` as root from `counterparty` alone, and choosing
+  `instrument` (not `transaction`) for `[instrument, issuer]`.
+- *Ambiguity refused, not invented:* the one genuinely ambiguous case — `party` referenced directly
+  while another entity forces a different root, so PARTY could be reached via either `counterparty` or
+  `issuer` — throws `JoinResolutionException` rather than guessing. Flagged to the human in the phase
+  summary; it does not occur in the spec's vocabulary (PARTY is always reached via a relation alias).
+
+**Corrections**
+- *Test cruft removed before commit:* an early draft of the resolver test carried an unused
+  `emptyMatrix()` helper guarded by `@SuppressWarnings("unused")` just to keep some imports — deleted
+  it and the imports, passing the empty comparator matrix inline (the resolver ignores comparators).
