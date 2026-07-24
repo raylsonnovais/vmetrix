@@ -1,0 +1,44 @@
+# AI usage log
+
+A running, honest record of how AI (Claude Code) was used while building this project, and — most
+importantly — the moments where its output was corrected, discarded, or redone, and why. This log is
+the raw material for the README's "AI usage in development" section, kept concrete by writing entries
+as they happen rather than reconstructing them at the end.
+
+## Tooling
+
+- **Claude Code** (Anthropic) as the primary pair-programming agent, driving design discussion,
+  code generation, the schema/seed, and tests.
+
+## Phase 0 — Contracts
+
+**Where AI helped**
+- Extracted the challenge text from the PDF (no `pdftotext`/poppler available) by writing a small
+  ASCII85+Flate stream decoder in Python — faster than manual transcription.
+- Reconstructed the sample dataset (10 PARTY / 8 INSTRUMENT / 15 TRANSACTION) and the comparator×type
+  matrix (5.3) from the PDF's two-column layout, then cross-checked row counts by running the DDL.
+- Drafted the metadata schema, the domain model, and the module interfaces.
+
+**Corrections / judgement calls (kept honest)**
+- *Over-engineering caught and reverted:* an early `JoinPlan` draft included an extra
+  `EntityAliasing` inner interface that only duplicated the `aliasByEntity` map. Removed it — the
+  challenge explicitly penalises abstraction for its own sake ("a hierarchy of 8 abstract classes
+  for 3 entities is excessive").
+- *Data-reading decision, not a guess to hide:* for the equity (id 3) and fund (id 6) instruments the
+  PDF shows a single `0` where maturity/coupon sit. Read as `MATURITY_DATE = NULL`, `COUPON_RATE = 0`.
+  Documented in `data.sql` so the choice is auditable.
+- *Seed gaps made explicit:* `CREATED_AT` (NOT NULL, absent from the sample) seeded deterministically
+  as `TXN_DATE 09:30:00`; `NOMINAL_VALUE` (absent) left NULL. Chosen to give the `timestamp` type real
+  values to test, and recorded rather than silently invented.
+- *Reserved-word risk verified, not assumed:* rather than trust that `TRANSACTION` is/ isn't reserved
+  in H2 Oracle mode, ran the full DDL + seed + a JOIN + `FETCH FIRST` through H2's `RunScript`. It
+  applies cleanly unquoted, so no quoting was added.
+
+**Open questions raised to the human, and how they were decided** (preferring a question over an
+assumption, as the spec invites — these bind in Phases 2/3):
+- **`like` semantics:** pass the caller's pattern verbatim as a bind parameter (`col LIKE :p`); the
+  caller owns `%`/`_`, no auto-wrapping and no wildcard escaping.
+- **`timestamp` filtering:** interpret values as `LocalDateTime` with no timezone conversion (the H2
+  column is timezone-naive); accept ISO local date-time and also a plain date (= start of day).
+- **`maxResults`:** default 100 when omitted; hard ceiling 1000; a request above the ceiling is
+  **rejected with a validation error** rather than silently clamped (transparency over tolerance).
