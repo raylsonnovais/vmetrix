@@ -42,3 +42,22 @@ assumption, as the spec invites — these bind in Phases 2/3):
   column is timezone-naive); accept ISO local date-time and also a plain date (= start of day).
 - **`maxResults`:** default 100 when omitted; hard ceiling 1000; a request above the ceiling is
   **rejected with a validation error** rather than silently clamped (transparency over tolerance).
+
+## Phase 1 — Metadata catalog
+
+**Where AI helped**
+- Wrote the JDBC loader, the immutable catalog, and the caching provider, plus unit and integration
+  tests, in one pass.
+
+**Corrections / judgement calls (kept honest)**
+- *Ordering bug caught before commit:* the first catalog draft copied comparator sets with
+  `Set.copyOf(...)`, which drops iteration order. Since `GET /api/metadata/comparators` should be
+  reproducible, switched the loader to `EnumSet` (declaration order) and the catalog to an
+  order-preserving unmodifiable `LinkedHashSet`. Verified with a "stable order" assertion.
+- *Idiomatic startup ordering over a timing hack:* to guarantee the catalog loads only after
+  `schema.sql`/`data.sql` have run, used Spring Boot's `@DependsOnDatabaseInitialization` rather than
+  an `ApplicationRunner` that could race the datasource init or leave a window where the server is up
+  but the catalog is empty.
+- *Fail-loud on bad metadata:* the loader resolves every `data_type`/`join_type`/`comparator` token
+  against its enum at load time and throws with a precise message on an unknown token, instead of
+  silently building a partial catalog.
