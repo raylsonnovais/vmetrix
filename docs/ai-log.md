@@ -112,3 +112,29 @@ assumption, as the spec invites — these bind in Phases 2/3):
   (`[instrument, party]` → via `issuer`) and "genuinely ambiguous" (`[transaction, party]` → refused
   at root selection). Lesson: AI-generated code that looks locally correct can hide a cross-method
   inconsistency two green suites apart — a human reading the two functions side by side caught it.
+
+## Phase 3 — SQL generator
+
+**Where AI helped**
+- Wrote the generator (Builder-style assembly, recursive Composite WHERE walk, per-comparator Strategy
+  as a `switch`, sequential bind allocation) and its 21 tests in one pass, including the full spec 5.1
+  example asserted end to end.
+
+**Judgement calls (kept honest)**
+- *Domain kept SQL-free:* the per-comparator Strategy lives as a `switch` in the SQL layer rather than
+  as an abstract method on the `Comparator` enum, honouring the Phase 0 decision that the domain enum
+  carries no dialect knowledge. No 12-class hierarchy.
+- *Parenthesisation:* a nested group with more than one child is wrapped in parentheses; the root group
+  and single-child groups are not. This guarantees `a AND (b OR c)` never collapses, without emitting
+  noisy outer parentheses.
+- *`in`/`notIn` as one list parameter:* `col IN (:pN)` with the whole `List` bound to `pN`; the
+  `NamedParameterJdbcTemplate` expands it. No manual `(:p1, :p2, ...)` construction, still zero
+  interpolation. `maxResults` is inlined into `FETCH FIRST n ROWS ONLY` (a validated int, no injection
+  surface). The one input-derived identifier — a select field's output alias — is emitted as a
+  double-quoted identifier with embedded quotes doubled, as defence in depth.
+
+**Correction caught by a test I wrote**
+- The first `GeneratedSql` used `Map.copyOf(parameters)`, which does not preserve insertion order; the
+  `containsExactly` assertion on the spec example failed ("p4 before p1"). Since the response should be
+  deterministic (`p1, p2, ...`), changed `GeneratedSql` to an order-preserving unmodifiable
+  `LinkedHashMap`. A case where the test earned its keep immediately.

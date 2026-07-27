@@ -1,5 +1,7 @@
 package com.vmetrix.querymanager.application.sql;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,7 +29,8 @@ public record GeneratedSql(
         int filterCount) {
 
     public GeneratedSql {
-        parameters = Map.copyOf(parameters);
+        // Preserve p1, p2, ... insertion order (Map.copyOf would not) so the response is deterministic.
+        parameters = Collections.unmodifiableMap(new LinkedHashMap<>(parameters));
         resolvedTables = List.copyOf(resolvedTables);
         resolvedJoins = List.copyOf(resolvedJoins);
     }
