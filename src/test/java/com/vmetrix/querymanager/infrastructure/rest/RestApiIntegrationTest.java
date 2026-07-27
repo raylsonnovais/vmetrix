@@ -167,7 +167,10 @@ class RestApiIntegrationTest {
         mvc.perform(post("/api/query/build").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.valid").value(false))
-                .andExpect(jsonPath("$.errors[0].message", containsString("reaches all referenced entities")));
+                .andExpect(jsonPath("$.errors[0].message",
+                        containsString("'party' is reachable through more than one relation")))
+                .andExpect(jsonPath("$.errors[0].message", containsString("counterparty")))
+                .andExpect(jsonPath("$.errors[0].message", containsString("issuer")));
     }
 
     @Test

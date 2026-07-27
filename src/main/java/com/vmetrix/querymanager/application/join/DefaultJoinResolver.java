@@ -91,8 +91,44 @@ public class DefaultJoinResolver implements JoinResolver {
                     return candidate.name();
                 }
             }
-            throw new JoinResolutionException(
-                    "Cannot determine a single root that reaches all referenced entities: " + referencedEntities);
+            throw diagnose(referencedEntities);
+        }
+
+        /**
+         * Builds a caller-facing error when no root reaches everything: it names the offending entity
+         * and, when that entity is reachable by several relations, points to the relation aliases to use
+         * instead (the mechanism Section 4.2 prescribes). The suggested aliases come from the catalog.
+         */
+        private JoinResolutionException diagnose(List<String> referencedEntities) {
+            // Vantage point: the most general base entity implied by the query — a referenced base entity
+            // or a referenced relation's source. That is the natural root, and where a directly referenced
+            // entity turns out to be ambiguous.
+            Set<String> anchors = new LinkedHashSet<>();
+            for (String name : referencedEntities) {
+                catalog.findEntity(name).ifPresent(entity -> anchors.add(entity.name()));
+                catalog.findRelation(name).ifPresent(relation -> anchors.add(relation.sourceEntity()));
+            }
+            String root = anchors.stream()
+                    .max(Comparator.comparingInt(anchor -> reachableFrom(anchor).size()))
+                    .orElse(referencedEntities.get(0));
+            Set<String> reachable = reachableFrom(root);
+
+            for (String name : referencedEntities) {
+                if (satisfiable(root, name)) {
+                    continue;
+                }
+                if (catalog.findRelation(name).isEmpty()) {
+                    List<RelationMeta> paths = relationsTargeting(name, reachable);
+                    if (paths.size() > 1) {
+                        String aliases = String.join(", ", paths.stream().map(RelationMeta::alias).toList());
+                        return new JoinResolutionException("'" + name
+                                + "' is reachable through more than one relation from '" + root
+                                + "'; reference it through a relation alias instead (one of: " + aliases + ")");
+                    }
+                }
+                return new JoinResolutionException("'" + name + "' cannot be reached from '" + root + "'");
+            }
+            return new JoinResolutionException("Cannot resolve a join path for: " + referencedEntities);
         }
 
         /** Base entities reachable from {@code root} by following relations (source reached → target reached). */

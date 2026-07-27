@@ -166,9 +166,12 @@ class DefaultJoinResolverTest {
     @Test
     void refusesGenuinelyAmbiguousPartyReference() {
         // from transaction, party is reachable via BOTH counterparty and issuer — genuinely ambiguous.
+        // The message names the entity and suggests the relation aliases (from the catalog) to use.
         assertThatThrownBy(() -> resolver.resolve(List.of("transaction", "party"), catalog))
                 .isInstanceOf(JoinResolutionException.class)
-                .hasMessageContaining("reaches all referenced entities");
+                .hasMessageContaining("'party' is reachable through more than one relation from 'transaction'")
+                .hasMessageContaining("counterparty")
+                .hasMessageContaining("issuer");
     }
 
     @Test
