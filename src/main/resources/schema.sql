@@ -9,6 +9,21 @@
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
+--  0. IDEMPOTENCY
+--  Drop everything first (children before parents) so the script is safely
+--  re-runnable — the embedded H2 (DB_CLOSE_DELAY=-1) survives across contexts
+--  within a JVM, and re-applying the schema must not fail on existing tables.
+-- ---------------------------------------------------------------------------
+
+DROP TABLE IF EXISTS TRANSACTION;
+DROP TABLE IF EXISTS INSTRUMENT;
+DROP TABLE IF EXISTS PARTY;
+DROP TABLE IF EXISTS META_FIELD;
+DROP TABLE IF EXISTS META_RELATION;
+DROP TABLE IF EXISTS META_COMPARATOR;
+DROP TABLE IF EXISTS META_ENTITY;
+
+-- ---------------------------------------------------------------------------
 --  1. DATA MODEL
 --  Oracle-style types (VARCHAR2 / NUMBER / DATE / TIMESTAMP) resolved by H2's
 --  Oracle compatibility mode. Insert order for the seed is PARTY -> INSTRUMENT

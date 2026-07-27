@@ -40,7 +40,7 @@ public class QueryController {
     }
 
     @PostMapping("/build")
-    public ResponseEntity<Object> build(@RequestBody QueryRequest request) {
+    public ResponseEntity<?> build(@RequestBody QueryRequest request) {
         MetadataCatalog catalog = catalogProvider.current();
         ValidationResult result = validator.validate(request, catalog);
         if (!result.isValid()) {
