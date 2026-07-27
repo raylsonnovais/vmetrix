@@ -276,8 +276,10 @@ zero Java change.
 ## AI usage in development
 
 I built this with **Claude Code** (Anthropic) as a pair-programming agent, working in small phases with
-a human review at every checkpoint. A per-phase notebook is in `docs/ai-log.md`; this is the distilled
-account.
+a human review at every checkpoint. Two files at the repository root document that process:
+`CLAUDE.md` holds the architecture brief and the phase protocol that guided the work, and
+`docs/ai-log.md` is a per-phase notebook of what the AI did and where it was corrected. This section is
+the distilled account.
 
 **Where the AI helped.** Design discussion and the module contracts up front; generating the schema,
 the seed and most of the code and tests; and debugging. One concretely useful bit of tooling: with no
