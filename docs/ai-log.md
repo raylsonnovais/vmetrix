@@ -138,3 +138,24 @@ assumption, as the spec invites — these bind in Phases 2/3):
   `containsExactly` assertion on the spec example failed ("p4 before p1"). Since the response should be
   deterministic (`p1, p2, ...`), changed `GeneratedSql` to an order-preserving unmodifiable
   `LinkedHashMap`. A case where the test earned its keep immediately.
+
+## Phase 4 — REST layer
+
+**Judgement calls (kept honest)**
+- *Bind straight onto the domain, keep it annotation-free:* rather than duplicate the request as a wire
+  DTO, the controller takes the domain `QueryRequest` directly (a plain record Jackson deserializes via
+  its canonical constructor). The only non-trivial part, the polymorphic filter tree, is handled by a
+  custom `JsonDeserializer<FilterNode>` registered as a `Module` bean in infrastructure — so the domain
+  carries zero Jackson annotations. A one-line `SortDirection` deserializer maps `asc`/`desc` the same
+  way, avoiding a global case-insensitive-enum flag.
+- *Deduction over a type discriminator:* the filter node's shape is deduced from the properties present
+  (`operator` → group, `comparator` → condition); a node with both or neither is rejected with a clear
+  message. `comparator` stays a `String` and `value` an `Object` on purpose, so an unknown comparator or
+  a bad value is not swallowed as a deserialization error but reaches the validator as a structured,
+  accumulated one (spec 5.4) — the Phase 2 contract change paying off end to end.
+- *One error shape everywhere:* validation errors, `JoinResolutionException` (an ambiguous entity
+  combination — invalid input, so 400 not 500, the decision closed in Phase 2), deserialization failures,
+  and the catch-all 500 all render as the same `ValidationResponse` body, so a client needs one parser.
+  Jackson's input-echo/location suffix is trimmed from messages; stack traces never reach the body.
+- *Timestamp at the boundary:* `generatedAt` is stamped in the controller (ISO-8601 UTC), leaving the
+  SQL generator deterministic and unit-testable.
