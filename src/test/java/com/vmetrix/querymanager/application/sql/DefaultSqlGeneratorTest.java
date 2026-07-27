@@ -282,6 +282,21 @@ class DefaultSqlGeneratorTest {
     }
 
     @Test
+    void outputAliasWithQuotesIsEscapedAndInert() {
+        // the output alias is the only identifier that comes from the request; an embedded quote must
+        // be doubled so it cannot close the quoted identifier and inject trailing SQL.
+        GeneratedSql sql = generate(query(
+                List.of(rf("transaction", "status", "bad\" FROM x --")),
+                null,
+                List.of("transaction")));
+
+        assertThat(sql.sql()).contains("t.STATUS AS \"bad\"\" FROM x --\"");
+        assertThat(sql.sql())
+                .startsWith("SELECT t.STATUS AS \"bad\"\" FROM x --\" FROM TRANSACTION t")
+                .endsWith("FETCH FIRST 100 ROWS ONLY");
+    }
+
+    @Test
     void generatedSqlContainsNoValueLiterals() {
         GeneratedSql sql = generate(query(
                 List.of(rf("transaction", "status")),
