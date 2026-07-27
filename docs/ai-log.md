@@ -159,3 +159,20 @@ assumption, as the spec invites — these bind in Phases 2/3):
   Jackson's input-echo/location suffix is trimmed from messages; stack traces never reach the body.
 - *Timestamp at the boundary:* `generatedAt` is stamped in the controller (ISO-8601 UTC), leaving the
   SQL generator deterministic and unit-testable.
+
+**Bug found in human code review — protocol errors turned into 500s**
+- The first advice used a bare `@ExceptionHandler(Exception.class)` without extending
+  `ResponseEntityExceptionHandler`. Because the advice's resolver runs before Spring's
+  `DefaultHandlerExceptionResolver`, the catch-all swallowed protocol exceptions: a wrong HTTP method
+  became 500 instead of 405, an unsupported media type 500 instead of 415 — and each was logged at
+  ERROR. Fix: extend `ResponseEntityExceptionHandler` so the framework keeps the correct protocol
+  status, overriding `handleHttpMessageNotReadable` (our safe message) and `handleExceptionInternal`
+  (re-body everything into the one `ValidationResponse` shape); the catch-all now only sees genuinely
+  unexpected exceptions. Anchored with 405/415 integration tests.
+
+**Bug surfaced by adding a second integration test, not by review**
+- Adding a second `@SpringBootTest` (the REST suite alongside the loader suite) failed context load
+  with "Table PARTY already exists": the named in-memory H2 with `DB_CLOSE_DELAY=-1` survives across
+  contexts in one JVM, so `schema.sql` ran twice. Fix: made the DDL idempotent (`DROP TABLE IF EXISTS`,
+  children before parents) so it is safely re-runnable — a property worth having anyway. A reminder
+  that a single integration test can hide an environmental assumption a second one exposes.
