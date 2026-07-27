@@ -89,6 +89,37 @@ class RestApiIntegrationTest {
     }
 
     @Test
+    void executesTheGeneratedSqlAgainstTheSeed() throws Exception {
+        // SETTLED transactions over 5,000,000, with the counterparty name. Checked by hand against the
+        // 15 seed rows: only txn 3 (11,750,000 → BTG Pactual) and txn 13 (10,000,000 → Falabella) qualify.
+        String body = """
+                {
+                  "select": [
+                    { "entity": "transaction", "field": "txnId" },
+                    { "entity": "transaction", "field": "amount" },
+                    { "entity": "counterparty", "field": "partyName", "alias": "counterparty" }
+                  ],
+                  "filters": { "operator": "AND", "conditions": [
+                    { "entity": "transaction", "field": "status", "comparator": "equals", "value": "SETTLED" },
+                    { "entity": "transaction", "field": "amount", "comparator": "greaterThan", "value": 5000000 }
+                  ] },
+                  "sorting": [ { "entity": "transaction", "field": "txnId", "direction": "asc" } ]
+                }
+                """;
+
+        mvc.perform(post("/api/query/execute").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.query.sql").exists())
+                .andExpect(jsonPath("$.rowCount").value(2))
+                .andExpect(jsonPath("$.rows[0].txnId").value(3))
+                .andExpect(jsonPath("$.rows[0].amount").value(11750000))
+                .andExpect(jsonPath("$.rows[0].counterparty").value("BTG Pactual"))
+                .andExpect(jsonPath("$.rows[1].txnId").value(13))
+                .andExpect(jsonPath("$.rows[1].amount").value(10000000))
+                .andExpect(jsonPath("$.rows[1].counterparty").value("Falabella S.A."));
+    }
+
+    @Test
     void validateAccumulatesEveryStructuredError() throws Exception {
         String body = """
                 {

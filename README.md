@@ -19,7 +19,7 @@ applied, catalog loaded):
 
 ```bash
 ./mvnw spring-boot:run       # starts on http://localhost:8080
-./mvnw test                  # 80 tests (unit + integration)
+./mvnw test                  # 81 tests (unit + integration)
 ```
 
 A local `mvn` works just as well if you have it (`mvn spring-boot:run` / `mvn test`).
@@ -30,6 +30,7 @@ A local `mvn` works just as well if you have it (`mvn spring-boot:run` / `mvn te
 |--------|------|--------------|
 | `POST` | `/api/query/build` | Validate, then generate SQL — or 400 with the structured errors |
 | `POST` | `/api/query/validate` | Validate only → `{"valid": true}` or 400 with all errors |
+| `POST` | `/api/query/execute` | Build the SQL, run it against the seed, return the rows (bonus) |
 | `GET`  | `/api/metadata/entities` | The catalog projected: entities, fields, relations |
 | `GET`  | `/api/metadata/comparators` | Valid comparators per data type |
 | `POST` | `/api/metadata/reload` | Rebuild the catalog from the `META_*` tables |
@@ -100,6 +101,46 @@ locating fields appear only when they apply):
       "message": "Comparator greaterThan is not valid for string fields" },
     { "entity": "unknownEntity",
       "message": "Entity unknownEntity does not exist in the model" }
+  ]
+}
+```
+
+### `POST /api/query/execute` — run the SQL against the seed (bonus)
+
+`ExecuteResponse` *composes* the `BuildResponse` (so the generated SQL and parameters stay visible)
+and adds `rowCount` and `rows`. Each row is keyed by the field's output alias, or its logical
+camelCase name — never the raw physical column.
+
+```bash
+curl -s -X POST http://localhost:8080/api/query/execute -H 'Content-Type: application/json' -d '{
+  "select": [
+    { "entity": "transaction", "field": "txnId" },
+    { "entity": "transaction", "field": "amount" },
+    { "entity": "counterparty", "field": "partyName", "alias": "counterparty" }
+  ],
+  "filters": { "operator": "AND", "conditions": [
+    { "entity": "transaction", "field": "status", "comparator": "equals", "value": "SETTLED" },
+    { "entity": "transaction", "field": "amount", "comparator": "greaterThan", "value": 5000000 }
+  ] },
+  "sorting": [ { "entity": "transaction", "field": "txnId", "direction": "asc" } ]
+}'
+```
+
+Response (`200 OK`, actual output — the two `SETTLED` transactions over 5,000,000 in the seed):
+
+```json
+{
+  "query": {
+    "sql": "SELECT t.TXN_ID, t.AMOUNT, p.PARTY_NAME AS \"counterparty\" FROM TRANSACTION t LEFT JOIN PARTY p ON t.COUNTERPARTY_ID = p.PARTY_ID WHERE t.STATUS = :p1 AND t.AMOUNT > :p2 ORDER BY t.TXN_ID ASC FETCH FIRST 100 ROWS ONLY",
+    "parameters": { "p1": "SETTLED", "p2": 5000000 },
+    "resolvedTables": ["TRANSACTION", "PARTY"],
+    "resolvedJoins": ["LEFT JOIN PARTY p ON t.COUNTERPARTY_ID = p.PARTY_ID"],
+    "metadata": { "columnCount": 3, "filterCount": 2, "generatedAt": "2026-07-27T20:55:36Z" }
+  },
+  "rowCount": 2,
+  "rows": [
+    { "txnId": 3,  "amount": 11750000, "counterparty": "BTG Pactual" },
+    { "txnId": 13, "amount": 10000000, "counterparty": "Falabella S.A." }
   ]
 }
 ```
@@ -218,7 +259,7 @@ all; and `outputAliasWithQuotesIsEscapedAndInert` checks the alias escaping.
 
 ## Tests
 
-80 tests, unit plus integration:
+81 tests, unit plus integration:
 
 - **Unit** cover each module against a hand-built catalog: catalog lookups and the comparator matrix;
   the validator's error accumulation, comparator×type checks and value conversion; the join resolver's
