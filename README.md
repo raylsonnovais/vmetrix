@@ -13,13 +13,16 @@ returns are ever written into SQL, while every filter value becomes a named bind
 
 ## How to run
 
-Requires JDK 17 and Maven. One command starts everything (embedded H2 in Oracle-compatibility mode,
-schema + seed applied, catalog loaded):
+Requires JDK 17+ only — the bundled Maven Wrapper fetches Maven itself, so no local Maven install is
+needed. One command starts everything (embedded H2 in Oracle-compatibility mode, schema + seed
+applied, catalog loaded):
 
 ```bash
-mvn spring-boot:run          # starts on http://localhost:8080
-mvn test                     # 80 tests (unit + integration)
+./mvnw spring-boot:run       # starts on http://localhost:8080
+./mvnw test                  # 80 tests (unit + integration)
 ```
+
+A local `mvn` works just as well if you have it (`mvn spring-boot:run` / `mvn test`).
 
 ### Endpoints
 
